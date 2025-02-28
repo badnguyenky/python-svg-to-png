@@ -1,33 +1,41 @@
-import base64
-import requests
 import io
-import cairosvg
+import asyncio
+import base64
 from flask import Flask, request, jsonify, send_file
+from pyppeteer import launch
 
 app = Flask(__name__)
+
+async def render_svg(svg_data):
+    """Convert SVG to PNG using Headless Chromium (Pyppeteer)"""
+    browser = await launch(headless=True, args=["--no-sandbox"])
+    page = await browser.newPage()
+    
+    # Set the viewport to match SVG dimensions
+    await page.setContent(f'<html><body>{svg_data}</body></html>')
+    element = await page.querySelector("svg")
+    if not element:
+        await browser.close()
+        raise Exception("No SVG element found!")
+
+    # Capture the screenshot of SVG
+    png_bytes = await element.screenshot()
+    await browser.close()
+    
+    return png_bytes
 
 @app.route("/convert", methods=["POST"])
 def convert_svg():
     try:
         data = request.json
         if not data or "svg" not in data:
-            return jsonify({"error": "SVG data or URL is required"}), 400
+            return jsonify({"error": "SVG data is required"}), 400
 
-        # Fetch SVG if a URL is provided
-        if data["svg"].startswith("http"):
-            response = requests.get(data["svg"])
-            if response.status_code != 200:
-                return jsonify({"error": "Failed to fetch SVG"}), 400
-            svg_data = response.text
-        else:
-            svg_data = data["svg"]
+        svg_data = data["svg"]
+        png_bytes = asyncio.run(render_svg(svg_data))
 
-        # Convert SVG to PNG
-        png_bytes = cairosvg.svg2png(bytestring=svg_data.encode("utf-8"))
-
-        # Return PNG as a response
         return send_file(io.BytesIO(png_bytes), mimetype="image/png")
-
+    
     except Exception as e:
         return jsonify({"error": "Conversion failed", "details": str(e)}), 500
 
