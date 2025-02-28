@@ -39,9 +39,11 @@ def convert_svg():
     except Exception as e:
         return jsonify({"error": "Conversion failed", "details": str(e)}), 500
 
-# Required for Vercel
+# ✅ **Vercel-specific handler**
+from vercel_wsgi import handle_request
+
 def handler(event, context):
-    return app(event, context)
+    return handle_request(app, event, context)
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
